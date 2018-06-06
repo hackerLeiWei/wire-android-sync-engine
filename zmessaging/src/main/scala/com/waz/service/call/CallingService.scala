@@ -417,6 +417,7 @@ class CallingService(val accountId:       UserId,
         c.updateVideoState(accountId, state)
       })("setVideoSendState")
     }
+    if (state == VideoState.Started) mediaManagerService.setSpeaker(true)
   }
 
   val callMessagesStage = EventScheduler.Stage[CallMessageEvent] {
