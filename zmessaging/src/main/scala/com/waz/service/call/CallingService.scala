@@ -443,7 +443,7 @@ class CallingService(val accountId:       UserId,
   }
 
   val callMessagesStage = EventScheduler.Stage[CallMessageEvent] {
-    case (_, events) => Future.successful(events.sortBy(_.time).foreach { e =>
+    case (_, events) => Future.successful(events.sortBy(_.time.instant).foreach { e =>
       receiveCallEvent(e.content, e.time.instant, e.convId, e.from, e.sender)
     })
   }

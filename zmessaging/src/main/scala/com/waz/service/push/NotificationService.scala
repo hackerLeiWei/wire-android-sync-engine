@@ -170,7 +170,7 @@ class NotificationService(context:         Context,
     * we don't want to show notifications for muted conversations.
     */
   private val lastReadMap = {
-    def convLastRead(c: ConversationData) = if (c.muted) Instant.MAX else c.lastRead
+    def convLastRead(c: ConversationData) = if (c.muted) RemoteInstant.Max else c.lastRead
 
     val timeUpdates = EventStream.union(
       convs.onAdded,
@@ -179,7 +179,7 @@ class NotificationService(context:         Context,
 
     def loadAll() = convs.getAllConvs.map(_.map(c => c.id -> convLastRead(c)).toMap)
 
-    def update(times: Map[ConvId, Instant], updates: Seq[ConversationData]) =
+    def update(times: Map[ConvId, RemoteInstant], updates: Seq[ConversationData]) =
       times ++ updates.map(c => c.id -> convLastRead(c))(breakOut)
 
     new AggregatingSignal(timeUpdates, loadAll(), update)
@@ -187,7 +187,7 @@ class NotificationService(context:         Context,
 
   lastReadMap.throttle(ClearThrottling) { lrMap =>
     removeNotifications { n =>
-      val lastRead = lrMap.getOrElse(n.conv, Instant.EPOCH)
+      val lastRead = lrMap.getOrElse(n.conv, RemoteInstant.Epoch)
       val removeIf = !lastRead.isBefore(n.time)
       verbose(s"Removing notif(${n.id}) if lastRead: $lastRead is not before n.time: ${n.time}?: $removeIf")
       removeIf

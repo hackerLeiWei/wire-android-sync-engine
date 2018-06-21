@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference
 import android.util.Base64
 import com.waz.ZLog.LogTag
 import com.waz.api.UpdateListener
+import com.waz.model.WireInstant
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.wrappers.{URI, URIBuilder}
 import org.json.{JSONArray, JSONObject}
@@ -200,6 +201,18 @@ package object utils {
     def >=(b: bp.Instant) = !a.isBefore(b)
     def <=(b: bp.Instant) = !a.isAfter(b)
     def remainingUntil(b: bp.Instant): FiniteDuration = if (a isBefore b) FiniteDuration(b.toEpochMilli - a.toEpochMilli, TimeUnit.MILLISECONDS) else Duration.Zero
+  }
+
+  implicit class RichWireInstant[T <: WireInstant](val a: T) extends AnyVal {
+    def until(b: T): bp.Duration = bp.Duration.ofMillis(b.instant.toEpochMilli - a.instant.toEpochMilli)
+    def max(b: T) = if (a.instant isBefore b.instant) b else a
+    def min(b: T) = if (a.instant isBefore b.instant) a else b
+    def >=(b: T) = !a.instant.isBefore(b.instant)
+    def <=(b: T) = !a.instant.isAfter(b.instant)
+    def remainingUntil(b: T): FiniteDuration = if (a.instant isBefore b.instant) FiniteDuration(b.instant.toEpochMilli - a.instant.toEpochMilli, TimeUnit.MILLISECONDS) else Duration.Zero
+    def isBefore(other: T): Boolean = a.instant.isBefore(other.instant)
+    def isAfter(other: T): Boolean = a.instant.isAfter(other.instant)
+    def compareTo(other: T) = a.instant.compareTo(other.instant)
   }
 
   implicit lazy val InstantIsOrdered: Ordering[Instant] = Ordering.ordered[Instant]

@@ -134,7 +134,7 @@ import org.scalatest._
       conv.archived shouldEqual false
       conv.archiveTime shouldEqual conv.lastEventTime
       conv.muted shouldEqual false
-      conv.muteTime shouldEqual conv.lastEventTime
+      conv.muteTime.contains(conv.lastEventTime) shouldEqual true
     }
 
     scenario("extract single ConversationResponse") {

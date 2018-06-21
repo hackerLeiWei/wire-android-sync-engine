@@ -156,7 +156,7 @@ class MessagesStorageImpl(context: Context,
 
   override def addMessage(msg: MessageData) = put(msg.id, msg)
 
-  def countUnread(conv: ConvId, lastReadTime: Instant): Future[UnreadCount] = {
+  def countUnread(conv: ConvId, lastReadTime: RemoteInstant): Future[UnreadCount] = {
     storage { MessageDataDao.findMessagesFrom(conv, lastReadTime)(_) }.future.map { msgs =>
       msgs.acquire { msgs =>
         val unread = msgs.filter { m => !m.isLocal && m.convId == conv && m.time.isAfter(lastReadTime) && !m.isDeleted && m.userId != userId && m.msgType != Message.Type.UNKNOWN } .toVector
@@ -199,10 +199,10 @@ class MessagesStorageImpl(context: Context,
       case _ => CancellableFuture.successful(None)
     }
 
-  override def findLocalFrom(conv: ConvId, time: Instant) =
+  override def findLocalFrom(conv: ConvId, time: RemoteInstant) =
     find(m => m.convId == conv && m.isLocal && !m.time.isBefore(time), MessageDataDao.findLocalFrom(conv, time)(_), identity)
 
-  def findMessagesFrom(conv: ConvId, time: Instant) =
+  def findMessagesFrom(conv: ConvId, time: RemoteInstant) =
     find(m => m.convId == conv && !m.time.isBefore(time), MessageDataDao.findMessagesFrom(conv, time)(_), identity)
 
   override def delete(msg: MessageData) =
@@ -234,7 +234,7 @@ class MessagesStorageImpl(context: Context,
       _ <- storage.flushWALToDatabase()
     } yield ()
 
-  def clear(conv: ConvId, upTo: Instant): Future[Unit] = {
+  def clear(conv: ConvId, upTo: RemoteInstant): Future[Unit] = {
     verbose(s"clear($conv, $upTo)")
     for {
       _ <- storage { MessageDataDao.deleteUpTo(conv, upTo)(_) } .future

@@ -38,7 +38,7 @@ import scala.util.Success
 trait MsgCursor {
   def size: Int
   def lastReadIndex: Int
-  def lastReadTime: Instant
+  def lastReadTime: RemoteInstant
   def apply(index: Int): MessageAndLikes
   def indexOf(time: Instant): Int
   def close(): Unit
@@ -46,7 +46,7 @@ trait MsgCursor {
 
 class MessagesCursor(cursor: DBCursor,
                      override val lastReadIndex: Int,
-                     val lastReadTime: Instant,
+                     val lastReadTime: RemoteInstant,
                      loader: MessageAndLikesStorage,
                      tracking: TrackingService)(implicit ordering: Ordering[Instant]) extends MsgCursor { self =>
   import MessagesCursor._

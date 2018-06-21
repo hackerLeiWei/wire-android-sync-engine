@@ -42,13 +42,13 @@ trait ConversationsContentUpdater {
   def hideIncomingConversation(user: UserId): Future[Option[(ConversationData, ConversationData)]]
   def setConversationHidden(id: ConvId, hidden: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def processConvWithRemoteId[A](remoteId: RConvId, retryAsync: Boolean, retryCount: Int = 0)(processor: ConversationData => Future[A])(implicit tag: LogTag, ec: ExecutionContext): Future[A]
-  def updateConversationLastRead(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationLastRead(id: ConvId, time: RemoteInstant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationMuted(conv: ConvId, muted: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationName(id: ConvId, name: String): Future[Option[(ConversationData, ConversationData)]]
   def setConvActive(id: ConvId, active: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
-  def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
-  def updateLastEvent(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
+  def updateConversationCleared(id: ConvId, time: RemoteInstant): Future[Option[(ConversationData, ConversationData)]]
+  def updateLastEvent(id: ConvId, time: RemoteInstant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
   def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole], link: Option[ConversationData.Link] = None): Future[Option[(ConversationData, ConversationData)]]
 
@@ -80,7 +80,7 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorage,
   storage.convUpdated { case (prev, conv) =>
     if (prev.cleared != conv.cleared) {
       verbose(s"cleared updated will clear messages, prev: $prev, updated: $conv")
-      conv.cleared.foreach(messagesStorage.clear(conv.id, _).recoverWithLog())
+      conv.cleared.foreach(c => messagesStorage.clear(conv.id, c.instant).recoverWithLog())
     }
   }
 
@@ -98,19 +98,19 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorage,
   override def setConvActive(id: ConvId, active: Boolean) = storage.update(id, { _.copy(isActive = active)})
 
   override def updateConversationArchived(id: ConvId, archived: Boolean) = storage.update(id, { c =>
-    c.copy(archived = archived, archiveTime = c.lastEventTime)
+    c.copy(archived = archived, archiveTime = if (archived) Some(c.lastEventTime) else None)
   })
 
   override def updateConversationMuted(conv: ConvId, muted: Boolean) = storage.update(conv, { c =>
-    c.copy(muted = muted, muteTime = c.lastEventTime)
+    c.copy(muted = muted, muteTime = if (muted) Some(c.lastEventTime) else None)
   })
 
-  override def updateConversationLastRead(id: ConvId, time: Instant) = storage.update(id, { conv =>
+  override def updateConversationLastRead(id: ConvId, time: RemoteInstant) = storage.update(id, { conv =>
     verbose(s"updateConversationLastRead($id, $time)")
     conv.withLastRead(time)
   })
 
-  override def updateConversationCleared(id: ConvId, time: Instant) = storage.update(id, { conv =>
+  override def updateConversationCleared(id: ConvId, time: RemoteInstant) = storage.update(id, { conv =>
     verbose(s"updateConversationCleared($id, $time)")
     conv.withCleared(time).withLastRead(time)
   })
@@ -119,19 +119,19 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorage,
     verbose(s"updateConversationState($conv, state: $state)")
 
     val (archived, archiveTime) = state match {
-      case ConversationState(Some(a), Some(t), _, _) if t >= conv.archiveTime => (a, t)
+      case ConversationState(Some(a), _) if a.archiveTime.exists(_ >= conv.archiveTime.getOrElse(RemoteInstant.Epoch)) => (a.isArchived, a.archiveTime)
       case _ => (conv.archived, conv.archiveTime)
     }
 
     val (muted, muteTime) = state match {
-      case ConversationState(_, _, Some(m), Some(t)) if t >= conv.muteTime => (m, t)
+      case ConversationState(_, Some(m)) if m.muteTime.exists(_ >= conv.muteTime.getOrElse(RemoteInstant.Epoch)) => (m.isMuted, m.muteTime)
       case _ => (conv.muted, conv.muteTime)
     }
 
     conv.copy(archived = archived, archiveTime = archiveTime, muted = muted, muteTime = muteTime)
   })
 
-  override def updateLastEvent(id: ConvId, time: Instant) = storage.update(id, { conv =>
+  override def updateLastEvent(id: ConvId, time: RemoteInstant) = storage.update(id, { conv =>
     verbose(s"updateLastEvent($conv, $time)")
 
     if (conv.lastEventTime.isAfter(time)) conv

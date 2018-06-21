@@ -28,35 +28,35 @@ import com.waz.service.SearchKey
 import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.{JSONArray, JSONObject}
-import org.threeten.bp.Instant
+import com.waz.utils.RichWireInstant
 
-case class ConversationData(id:                   ConvId              = ConvId(),
-                            remoteId:             RConvId             = RConvId(),
-                            name:                 Option[String]      = None,
-                            creator:              UserId              = UserId(),
-                            convType:             ConversationType    = ConversationType.Group,
-                            team:                 Option[TeamId]      = None,
-                            isManaged:            Option[Boolean]     = None,
-                            lastEventTime:        Instant             = Instant.now(),
-                            isActive:             Boolean             = true,
-                            lastRead:             Instant             = Instant.EPOCH,
-                            muted:                Boolean             = false,
-                            muteTime:             Instant             = Instant.EPOCH,
-                            archived:             Boolean             = false,
-                            archiveTime:          Instant             = Instant.EPOCH,
-                            cleared:              Option[Instant]     = None,
-                            generatedName:        String              = "",
-                            searchKey:            Option[SearchKey]   = None,
-                            unreadCount:          UnreadCount         = UnreadCount(0, 0, 0),
-                            failedCount:          Int                 = 0,
-                            missedCallMessage:    Option[MessageId]   = None,
-                            incomingKnockMessage: Option[MessageId]   = None,
-                            hidden:               Boolean             = false,
-                            verified:             Verification        = Verification.UNKNOWN,
-                            ephemeral:            EphemeralExpiration = EphemeralExpiration.NONE,
-                            access:               Set[Access]         = Set.empty,
-                            accessRole:           Option[AccessRole]  = None,
-                            link:                 Option[Link]        = None) {
+case class ConversationData(id:                   ConvId                = ConvId(),
+                            remoteId:             RConvId               = RConvId(),
+                            name:                 Option[String]        = None,
+                            creator:              UserId                = UserId(),
+                            convType:             ConversationType      = ConversationType.Group,
+                            team:                 Option[TeamId]        = None,
+                            isManaged:            Option[Boolean]       = None,
+                            lastEventTime:        RemoteInstant         = RemoteInstant.Epoch,
+                            isActive:             Boolean               = true,
+                            lastRead:             RemoteInstant         = RemoteInstant.Epoch,
+                            muted:                Boolean               = false,
+                            muteTime:             Option[RemoteInstant] = None,
+                            archived:             Boolean               = false,
+                            archiveTime:          Option[RemoteInstant] = None,
+                            cleared:              Option[RemoteInstant] = None,
+                            generatedName:        String                = "",
+                            searchKey:            Option[SearchKey]     = None,
+                            unreadCount:          UnreadCount           = UnreadCount(0, 0, 0),
+                            failedCount:          Int                   = 0,
+                            missedCallMessage:    Option[MessageId]     = None,
+                            incomingKnockMessage: Option[MessageId]     = None,
+                            hidden:               Boolean               = false,
+                            verified:             Verification          = Verification.UNKNOWN,
+                            ephemeral:            EphemeralExpiration   = EphemeralExpiration.NONE,
+                            access:               Set[Access]           = Set.empty,
+                            accessRole:           Option[AccessRole]    = None,
+                            link:                 Option[Link]          = None) {
 
   def displayName = if (convType == ConversationType.Group) name.getOrElse(generatedName) else generatedName
 
@@ -66,9 +66,9 @@ case class ConversationData(id:                   ConvId              = ConvId()
 
   lazy val completelyCleared = cleared.exists(!_.isBefore(lastEventTime))
 
-  def withLastRead(time: Instant) = copy(lastRead = lastRead max time)
+  def withLastRead(time: RemoteInstant) = copy(lastRead = lastRead max time)
 
-  def withCleared(time: Instant) = copy(cleared = Some(cleared.fold(time)(_ max time)))
+  def withCleared(time: RemoteInstant) = copy(cleared = Some(cleared.fold(time)(_ max time)))
 
   def updated(d: ConversationData): Option[ConversationData] = {
     val ct = if (ConversationType.isOneToOne(convType) && d.convType != ConversationType.OneToOne) convType else d.convType
@@ -172,14 +172,14 @@ object ConversationData {
       convType             = ConversationType('convType),
       team                 = decodeOptId[TeamId]('team),
       isManaged            = decodeOptBoolean('is_managed),
-      lastEventTime        = decodeInstant('lastEventTime),
+      lastEventTime        = decodeRemoteInstant('lastEventTime),
       isActive             = decodeBool('is_active),
-      lastRead             = decodeInstant('lastReadTime),
+      lastRead             = decodeRemoteInstant('lastReadTime),
       muted                = 'muted,
-      muteTime             = decodeInstant('muteTime),
+      muteTime             = decodeOptRemoteInstant('muteTime),
       archived             = 'archived,
-      archiveTime          = decodeInstant('archiveTime),
-      cleared              = decodeOptInstant('cleared),
+      archiveTime          = decodeOptRemoteInstant('archiveTime),
+      cleared              = decodeOptRemoteInstant('cleared),
       generatedName        = 'generatedName,
       searchKey            = decodeOptString('name) map SearchKey,
       unreadCount          = UnreadCount('unreadCount, 'unreadCallCount, 'unreadPingCount),
@@ -209,9 +209,9 @@ object ConversationData {
       o.put("is_active", c.isActive)
       o.put("lastReadTime", c.lastRead.toEpochMilli)
       o.put("muted", c.muted)
-      o.put("muteTime", c.muteTime.toEpochMilli)
+      c.muteTime.foreach(mt => o.put("muteTime", mt.toEpochMilli))
       o.put("archived", c.archived)
-      o.put("archiveTime", c.archiveTime.toEpochMilli)
+      c.archiveTime.foreach(at => o.put("archiveTime", at.toEpochMilli))
       c.cleared.foreach(cl => o.put("cleared", cl.toEpochMilli))
       o.put("generatedName", c.generatedName)
       o.put("unreadCount", c.unreadCount.normal)
@@ -237,14 +237,14 @@ object ConversationData {
     val ConvType         = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
     val Team             = opt(id[TeamId]('team))(_.team)
     val IsManaged        = opt(bool('is_managed))(_.isManaged)
-    val LastEventTime    = timestamp('last_event_time)(_.lastEventTime)
+    val LastEventTime    = remoteTimestamp('last_event_time)(_.lastEventTime)
     val IsActive         = bool('is_active)(_.isActive)
-    val LastRead         = timestamp('last_read)(_.lastRead)
+    val LastRead         = remoteTimestamp('last_read)(_.lastRead)
     val Muted            = bool('muted)(_.muted)
-    val MutedTime        = timestamp('mute_time)(_.muteTime)
+    val MutedTime        = opt(remoteTimestamp('mute_time))(_.muteTime)
     val Archived         = bool('archived)(_.archived)
-    val ArchivedTime     = timestamp('archive_time)(_.archiveTime)
-    val Cleared          = opt(timestamp('cleared))(_.cleared)
+    val ArchivedTime     = opt(remoteTimestamp('archive_time))(_.archiveTime)
+    val Cleared          = opt(remoteTimestamp('cleared))(_.cleared)
     val GeneratedName    = text('generated_name)(_.generatedName)
     val SKey             = opt(text[SearchKey]('search_key, _.asciiRepresentation, SearchKey.unsafeRestore))(_.searchKey)
     val UnreadCount      = int('unread_count)(_.unreadCount.normal)
