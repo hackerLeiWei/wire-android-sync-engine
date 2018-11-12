@@ -51,6 +51,7 @@ public enum SyncCommand {
     PostConnection("post-connection"),
     DeletePushToken("delete-push-token"),
     SyncRichMedia("sync-rich-media"),
+    SyncNotifications("sync-notifications"),
     RegisterPushToken("register-push-token"),
     PostSelf("post-self"),
     PostAddressBook("post-addressbook"),

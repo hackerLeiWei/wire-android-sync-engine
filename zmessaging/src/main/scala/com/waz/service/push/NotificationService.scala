@@ -113,7 +113,7 @@ class NotificationService(context:         Context,
                           members:         MembersStorage,
                           reactionStorage: ReactionsStorage,
                           userPrefs:       UserPreferences,
-                          pushService:     PushService,
+                          pushService:     PushNotificationService,
                           globalNots:      GlobalNotificationsService) {
 
   import NotificationService._

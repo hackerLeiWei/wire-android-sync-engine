@@ -23,7 +23,7 @@ import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.UiLifeCycle
-import com.waz.service.push.{GlobalNotificationsService, GlobalNotificationsServiceImpl, NotificationService, PushService}
+import com.waz.service.push.{GlobalNotificationsService, GlobalNotificationsServiceImpl, NotificationService, PushNotificationService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
 import com.waz.utils.RichFiniteDuration
@@ -44,7 +44,7 @@ class NotificationsServiceSpec extends AndroidFreeSpec {
   val convs     = mock[ConversationStorage]
   val reactions = mock[ReactionsStorage]
   val userPrefs = new TestUserPreferences
-  val push      = mock[PushService]
+  val push      = mock[PushNotificationService]
   val members   = mock[MembersStorage]
   val globalNots: GlobalNotificationsService = new GlobalNotificationsServiceImpl
 

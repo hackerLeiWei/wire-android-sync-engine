@@ -94,6 +94,12 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostSelf](req)(Merged(_))
   }
 
+  case class SyncNotifications(trigger: Option[Uid]) extends BaseRequest(Cmd.SyncNotifications) with Serialized {
+    override def merge(req: SyncRequest) = mergeHelper[SyncNotifications](req) { other =>
+      Merged(this.copy(trigger = other.trigger.orElse(trigger)))
+    }
+  }
+
   case class RegisterPushToken(token: PushToken) extends BaseRequest(Cmd.RegisterPushToken) {
     override def merge(req: SyncRequest) = mergeHelper[RegisterPushToken](req) { r =>
       Merged(this.copy(token = r.token))
@@ -351,6 +357,7 @@ object SyncRequest {
           case Cmd.SyncTeamMember            => SyncTeamMember(userId)
           case Cmd.SyncConnections           => SyncConnections
           case Cmd.RegisterPushToken         => RegisterPushToken(decodeId[PushToken]('token))
+          case Cmd.SyncNotifications         => SyncNotifications('trigger)
           case Cmd.PostSelf                  => PostSelf(JsonDecoder[UserInfo]('user))
           case Cmd.PostAddressBook           => PostAddressBook(JsonDecoder.opt[AddressBook]('addressBook).getOrElse(AddressBook.Empty))
           case Cmd.SyncSelfClients           => SyncSelfClients
@@ -406,6 +413,9 @@ object SyncRequest {
         case SyncTeamMember(userId)           => o.put("user", userId.str)
         case DeletePushToken(token)           => putId("token", token)
         case RegisterPushToken(token)         => putId("token", token)
+        case SyncNotifications(trigger) =>
+          trigger.foreach(v => putId("trigger", v))
+
         case SyncRichMedia(messageId)         => putId("message", messageId)
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
         case PostSelfName(name)               => o.put("name", name)
