@@ -46,7 +46,7 @@ class PushNotificationSyncHandler(clientId: ClientId,
         case id   => client.loadNotifications(id, clientId)
       }).future.flatMap {
         case Right(LoadNotificationsResult(response, historyLost)) if response.hasMore =>
-          service.onNotificationsResponse(response.notifications, trigger, response.beTime, firstSync = firstSync, historyLost = false)
+          service.onNotificationsResponse(response.notifications, trigger, response.beTime, firstSync = firstSync, historyLost)
             .flatMap(_ => load(response.notifications.lastOption.map(_.id)))
 
         case Right(LoadNotificationsResult(response, historyLost)) =>
@@ -61,5 +61,8 @@ class PushNotificationSyncHandler(clientId: ClientId,
       load(since, firstSync = since.isEmpty)
     }
   }
+
+  def processNotifications(): Future[SyncResult] =
+    service.processNotifications().map(_ => SyncResult.Success)
 
 }

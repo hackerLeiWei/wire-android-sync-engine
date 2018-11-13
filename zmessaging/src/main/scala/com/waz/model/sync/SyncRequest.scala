@@ -69,17 +69,20 @@ object SyncRequest {
 
   sealed trait Serialized extends SyncRequest
 
+  sealed trait Offline extends SyncRequest
+
   import sync.{SyncCommand => Cmd}
 
-  case object Unknown             extends BaseRequest(Cmd.Unknown)
-  case object SyncSelf            extends BaseRequest(Cmd.SyncSelf)
-  case object DeleteAccount       extends BaseRequest(Cmd.DeleteAccount)
-  case object SyncConversations   extends BaseRequest(Cmd.SyncConversations)
-  case object SyncConnections     extends BaseRequest(Cmd.SyncConnections)
-  case object SyncSelfClients     extends BaseRequest(Cmd.SyncSelfClients)
-  case object SyncSelfPermissions extends BaseRequest(Cmd.SyncSelfPermissions)
-  case object SyncClientsLocation extends BaseRequest(Cmd.SyncClientLocation)
-  case object SyncTeam            extends BaseRequest(Cmd.SyncTeam)
+  case object Unknown              extends BaseRequest(Cmd.Unknown)
+  case object SyncSelf             extends BaseRequest(Cmd.SyncSelf)
+  case object DeleteAccount        extends BaseRequest(Cmd.DeleteAccount)
+  case object SyncConversations    extends BaseRequest(Cmd.SyncConversations)
+  case object SyncConnections      extends BaseRequest(Cmd.SyncConnections)
+  case object SyncSelfClients      extends BaseRequest(Cmd.SyncSelfClients)
+  case object SyncSelfPermissions  extends BaseRequest(Cmd.SyncSelfPermissions)
+  case object SyncClientsLocation  extends BaseRequest(Cmd.SyncClientLocation)
+  case object SyncTeam             extends BaseRequest(Cmd.SyncTeam)
+  case object ProcessNotifications extends BaseRequest(Cmd.ProcessNotifications) with Offline with Serialized
 
   case class SyncTeamMember(userId: UserId) extends BaseRequest(Cmd.SyncTeam) {
     override val mergeKey: Any = (cmd, userId)
@@ -358,6 +361,7 @@ object SyncRequest {
           case Cmd.SyncConnections           => SyncConnections
           case Cmd.RegisterPushToken         => RegisterPushToken(decodeId[PushToken]('token))
           case Cmd.SyncNotifications         => SyncNotifications('trigger)
+          case Cmd.ProcessNotifications      => ProcessNotifications
           case Cmd.PostSelf                  => PostSelf(JsonDecoder[UserInfo]('user))
           case Cmd.PostAddressBook           => PostAddressBook(JsonDecoder.opt[AddressBook]('addressBook).getOrElse(AddressBook.Empty))
           case Cmd.SyncSelfClients           => SyncSelfClients
@@ -481,7 +485,7 @@ object SyncRequest {
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncSelf | SyncTeam | DeleteAccount | SyncConversations | SyncConnections |
-             SyncSelfClients | SyncSelfPermissions | SyncClientsLocation | Unknown => () // nothing to do
+             SyncSelfClients | SyncSelfPermissions | SyncClientsLocation | ProcessNotifications | Unknown => () // nothing to do
       }
     }
   }

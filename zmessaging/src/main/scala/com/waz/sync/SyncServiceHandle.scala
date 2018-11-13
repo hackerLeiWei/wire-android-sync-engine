@@ -73,7 +73,12 @@ trait SyncServiceHandle {
   def postOpenGraphData(conv: ConvId, msg: MessageId, editTime: RemoteInstant): Future[SyncId]
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId]
 
+  /**
+    * @param trigger a push notification id that was responsible for this call to syncNotifications
+    */
   def syncNotifications(trigger: Option[Uid]): Future[SyncId]
+  def processNotifications(): Future[SyncId]
+
   def registerPush(token: PushToken): Future[SyncId]
   def deletePushToken(token: PushToken): Future[SyncId]
 
@@ -108,8 +113,8 @@ class AndroidSyncServiceHandle(account: UserId, service: SyncRequestService, tim
     _ <- shouldSyncConversations := false
   } yield {}
 
-  private def addRequest(req: SyncRequest, priority: Int = Priority.Normal, dependsOn: Seq[SyncId] = Nil, forceRetry: Boolean = false, delay: FiniteDuration = Duration.Zero): Future[SyncId] =
-    service.addRequest(account, req, priority, dependsOn, forceRetry, delay)
+  private def addRequest(req: SyncRequest, children: Seq[SyncRequest] = Seq.empty, priority: Int = Priority.Normal, dependsOn: Seq[SyncId] = Nil, forceRetry: Boolean = false, delay: FiniteDuration = Duration.Zero): Future[SyncId] =
+    service.addRequest(account, req, children, priority, dependsOn, forceRetry, delay)
 
   def syncSearchQuery(query: SearchQuery) = addRequest(SyncSearchQuery(query), priority = Priority.High)
   def syncUsers(ids: Set[UserId]) = addRequest(SyncUser(ids))
@@ -152,7 +157,16 @@ class AndroidSyncServiceHandle(account: UserId, service: SyncRequestService, tim
   def postAddBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) = addRequest(PostAddBot(cId, pId, iId))
   def postRemoveBot(cId: ConvId, botId: UserId) = addRequest(PostRemoveBot(cId, botId))
 
-  def syncNotifications(trigger: Option[Uid]) = addRequest(SyncNotifications(trigger), priority = Priority.High)
+  def syncNotifications(trigger: Option[Uid]) =
+    addRequest(
+      req      = SyncNotifications(trigger),
+      priority = Priority.High,
+      children = Seq(ProcessNotifications),
+      delay    = if (trigger.isDefined) 3.seconds else Duration.Zero
+    )
+
+  def processNotifications() = addRequest(ProcessNotifications)
+
   def registerPush(token: PushToken)    = addRequest(RegisterPushToken(token), priority = Priority.High, forceRetry = true)
   def deletePushToken(token: PushToken) = addRequest(DeletePushToken(token), priority = Priority.Low)
 
@@ -224,6 +238,7 @@ class AccountSyncHandler(accounts: AccountsService) extends SyncHandler {
           case PostAddressBook(ab)                                  => zms.addressbookSync.postAddressBook(ab)
           case RegisterPushToken(token)                             => zms.gcmSync.registerPushToken(token)
           case SyncNotifications(trigger)                           => zms.pushNotificationsSync.syncNotifications(trigger)
+          case ProcessNotifications                                 => zms.pushNotificationsSync.processNotifications()
           case PostLiking(convId, liking)                           => zms.reactionsSync.postReaction(convId, liking)
           case PostAddBot(cId, pId, iId)                            => zms.integrationsSync.addBot(cId, pId, iId)
           case PostRemoveBot(cId, botId)                            => zms.integrationsSync.removeBot(cId, botId)
