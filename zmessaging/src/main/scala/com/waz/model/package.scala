@@ -112,6 +112,8 @@ package object model {
     object TextMessage {
       import scala.concurrent.duration.DurationInt
 
+      def apply(text: String): GenericMessage = GenericMessage(Uid(), Text(text, Nil, Nil))
+
       def apply(text: String, mentions: Seq[com.waz.model.Mention]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, Nil))
 
       def apply(text: String, mentions: Seq[com.waz.model.Mention], links: Seq[LinkPreview]): GenericMessage = GenericMessage(Uid(), Text(text, mentions, links))
