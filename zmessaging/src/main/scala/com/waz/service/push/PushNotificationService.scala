@@ -27,7 +27,7 @@ import com.waz.model.sync.SyncCommand
 import com.waz.service.ZMessaging.{accountTag, clock}
 import com.waz.service._
 import com.waz.service.otr.OtrService
-import com.waz.service.tracking.{MissedPushEvent, ReceivedPushEvent, TrackingService}
+import com.waz.service.tracking.{MissedPushEvent, TrackingService}
 import com.waz.sync.client.PushNotificationEncoded
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.{CancellableFuture, Threading}
@@ -191,39 +191,34 @@ class PushNotificationServiceImpl(selfUserId:           UserId,
 
   override def onNotificationsResponse(notsPage: Vector[PushNotificationEncoded], trigger: Option[Uid], time: Option[Instant], firstSync: Boolean, historyLost: Boolean) = {
     verbose(s"onNotificationsResponse: nots: ${notsPage.size}, trigger: $trigger, time: $time, firstSync: $firstSync, historyLost: $historyLost")
-    def reportMissing(): Unit =
+    def reportMissing(): Future[Unit] =
       for {
         now    <- beDrift.head.map(clock.instant + _) //get time at fetch (before waiting)
         _      <- CancellableFuture.delay(5.seconds).future //wait a few seconds for any lagging FCM notifications before doing comparison
         nw     <- network.networkMode.head
         pushes <- receivedPushes.list()
         inBackground <- lifeCycle.uiActive.map(!_).head
-        _ <- {
-          val notsUntilPush = notsPage.takeWhile(n => !trigger.contains(n.id))
-          val missedEvents = {
-            notsUntilPush.filterNot(_.transient).map { n =>
-              val eventsToTrack = //Not all event types generate a push notification, here we pull out the most important ones
-                JsonDecoder.array(n.events, { case (arr, i) => arr.getJSONObject(i) })
-                  .filter(ev => TrackingEvents(ev.getString("type")))
-                  .filter(ev => UserId(ev.getString("from")) != selfUserId)
-                  .map(_.getString("type"))
+        notsUntilPush = notsPage.takeWhile(n => !trigger.contains(n.id)) ++ notsPage.find(n => trigger.contains(n.id)).toSeq
+        missedEvents  = {
+          notsUntilPush.filterNot(_.transient).map { n =>
+            val eventsToTrack = //Not all event types generate a push notification, here we pull out the most important ones
+              JsonDecoder.array(n.events, { case (arr, i) => arr.getJSONObject(i) })
+                .filter(ev => TrackingEvents(ev.getString("type")))
+                .filter(ev => UserId(ev.getString("from")) != selfUserId)
+                .map(_.getString("type"))
 
-              (n.id, eventsToTrack)
-            }.filter { case (id, evs) =>
-              evs.nonEmpty && !pushes.map(_.id).contains(id)
-            }
+            (n.id, eventsToTrack)
+          }.filter { case (id, evs) =>
+            evs.nonEmpty && !pushes.map(_.id).contains(id)
           }
-
+        }
+        _ <-
           if (missedEvents.nonEmpty) { //we didn't get pushes for some returned notifications
             val eventFrequency = TrackingEvents.map(e => (e, missedEvents.toMap.values.flatten.count(_ == e))).toMap
             tracking.track(MissedPushEvent(now, missedEvents.size, inBackground, nw, network.getNetworkOperatorName, eventFrequency, missedEvents.last._1.str))
-          }
+          } else Future.successful({})
 
-          if (pushes.nonEmpty)
-            pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(now)))).foreach(p => tracking.track(ReceivedPushEvent(p)))
-
-          receivedPushes.removeAll(notsUntilPush.map(_.id)) //remove all notifications up to the point we've checked so far - leave the rest in case of pagination of notifications
-        }
+        _ <- receivedPushes.removeAll(notsUntilPush.map(_.id)) //remove all notifications up to the point we've checked so far - leave the rest in case of pagination of notifications
       } yield {}
 
     beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v)).flatMap { _ =>
@@ -231,8 +226,8 @@ class PushNotificationServiceImpl(selfUserId:           UserId,
       else {
         for {
           _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
+          _ <- reportMissing()
           _ <- storeNotifications(notsPage)
-          _ = reportMissing() // asynchronous tracking - don't want to block
         } yield {}
       }
     }
