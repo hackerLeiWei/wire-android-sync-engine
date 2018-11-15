@@ -50,7 +50,8 @@ class NotificationsAndroidService extends FutureService {
           case Some(acc) => accs.getZms(acc).flatMap {
             case Some(zms) if ActionClear == intent.getAction =>
               verbose(s"Clearing notifications for account: $acc and conversation:$conversation")
-              zms.notifications.removeNotifications(nd => conversation.forall(_ == nd.conv))
+              Future.successful({}) //TODO
+//              zms.notifications.removeNotifications(nd => conversation.forall(_ == nd.conv))
             case Some(zms) if ActionQuickReply == intent.getAction =>
               (instantReplyContent, conversation) match {
                 case (Some(content), Some(convId)) =>

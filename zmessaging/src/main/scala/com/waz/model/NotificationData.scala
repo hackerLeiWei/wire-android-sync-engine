@@ -18,33 +18,34 @@
 package com.waz.model
 
 import com.waz.api.NotificationsHandler.NotificationType
+import com.waz.api.NotificationsHandler.NotificationType.LikedContent
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.utils.wrappers.DBCursor
 import com.waz.utils.{EnumCodec, JsonDecoder, JsonEncoder}
 import org.json.JSONObject
 
-case class NotificationData(id:                NotId             = NotId(),
-                            msg:               String            = "",
-                            conv:              ConvId            = ConvId(),
-                            user:              UserId            = UserId(),
-                            msgType:           NotificationType  = NotificationType.TEXT,
-                            time:              RemoteInstant     = RemoteInstant.Epoch,
-                            userName:          Option[Name]      = None,
-                            ephemeral:         Boolean           = false,
-                            mentions:          Seq[UserId]       = Seq.empty,
-                            referencedMessage: Option[MessageId] = None,
-                            hasBeenDisplayed:  Boolean           = false,
-                            isQuote:           Boolean           = false)
+case class NotificationData(id:                NotId                = NotId(),
+                            msg:               String               = "",
+                            conv:              ConvId               = ConvId(),
+                            user:              UserId               = UserId(),
+                            msgType:           NotificationType     = NotificationType.TEXT,
+                            time:              RemoteInstant        = RemoteInstant.Epoch,
+                            userName:          Option[Name]         = None,
+                            ephemeral:         Boolean              = false,
+                            mentions:          Seq[UserId]          = Seq.empty,
+                            likedContent:      Option[LikedContent] = None,
+                            hasBeenDisplayed:  Boolean              = false,
+                            isReply:           Boolean              = false) {
+}
 
 object NotificationData {
 
   implicit lazy val Decoder: JsonDecoder[NotificationData] = new JsonDecoder[NotificationData] {
     import JsonDecoder._
-
     override def apply(implicit js: JSONObject): NotificationData = NotificationData(NotId('id: String), 'message, 'conv, 'user,
       NotificationCodec.decode('msgType), 'time, 'userName, 'ephemeral,
-      decodeUserIdSeq('mentions), decodeOptId[MessageId]('referencedMessage), 'hasBeenDisplayed, 'isQuote)
+      decodeUserIdSeq('mentions), decodeOptString('likedContent).map(LikedContentCodec.decode), 'hasBeenDisplayed)
   }
 
   implicit lazy val Encoder: JsonEncoder[NotificationData] = new JsonEncoder[NotificationData] {
@@ -59,8 +60,7 @@ object NotificationData {
       o.put("hasBeenDisplayed", v.hasBeenDisplayed)
       v.userName foreach (o.put("userName", _))
       if (v.mentions.nonEmpty) o.put("mentions", JsonEncoder.arrString(v.mentions.map(_.str)))
-      v.referencedMessage foreach (o.put("referencedMessage", _))
-      o.put("isQuote", v.isQuote)
+      v.likedContent.foreach(v => o.put("likedContent", LikedContentCodec.encode(v)))
     }
   }
 
@@ -72,6 +72,12 @@ object NotificationData {
     override val table = Table("NotificationData", Id, Data)
 
     override def apply(implicit cursor: DBCursor): NotificationData = JsonDecoder.decode(cursor.getString(1))
+  }
+
+  implicit val LikedContentCodec: EnumCodec[LikedContent, String] = EnumCodec.injective {
+    case LikedContent.TEXT_OR_URL => "TextOrUrl"
+    case LikedContent.PICTURE => "Picture"
+    case LikedContent.OTHER => "Other"
   }
 
   implicit val NotificationOrdering: Ordering[NotificationData] = Ordering.by((data: NotificationData) => (data.time, data.id))

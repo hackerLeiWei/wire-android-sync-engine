@@ -90,6 +90,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
 
+  val clock = ZMessaging.clock
+
   val global     = account.global
   val selfUserId = account.userId
 
@@ -138,7 +140,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   def loadService       = global.loaderService
   def flowmanager       = global.flowmanager
   def mediamanager      = global.mediaManager
-  def gNotifcations     = global.notifications
+  def notifcationsUi    = global.notificationsUi
   def tracking          = global.trackingService
 
   def db                = storage.db
@@ -207,7 +209,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val verificationUpdater                        = wire[VerificationStateUpdater]
   lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
   lazy val connection: ConnectionServiceImpl          = wire[ConnectionServiceImpl]
-  lazy val calling: CallingServiceImpl                    = wire[CallingServiceImpl]
+  lazy val calling: CallingServiceImpl                = wire[CallingServiceImpl]
   lazy val callLogging: CallLoggingService            = wire[CallLoggingService]
   lazy val contacts: ContactsServiceImpl              = wire[ContactsServiceImpl]
   lazy val typing: TypingService                      = wire[TypingService]
@@ -263,8 +265,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
         conversations.convStateEventProcessingStage,
         msgEvents.messageEventProcessingStage,
         genericMsgs.eventProcessingStage,
-        notifications.notificationEventsStage,
-        notifications.lastReadProcessingStage
+        notifications.messageNotificationEventsStage,
+        notifications.connectionNotificationEventStage
       )
     )
   }
@@ -316,16 +318,17 @@ object ZMessaging { self =>
 
   private[waz] var context: Context = _
 
-  private var prefs:        GlobalPreferences = _
-  private var googleApi:    GoogleApi = _
-  private var backend:      BackendConfig = BackendConfig.StagingBackend
-  private var base64:       Base64 = _
-  private var syncRequests: SyncRequestService = _
+  private var prefs:           GlobalPreferences = _
+  private var googleApi:       GoogleApi = _
+  private var backend:         BackendConfig = BackendConfig.StagingBackend
+  private var base64:          Base64 = _
+  private var syncRequests:    SyncRequestService = _
+  private var notificationsUi: NotificationUiController = _
 
   //var for tests - and set here so that it is globally available without the need for DI
   var clock = Clock.systemUTC()
 
-  private lazy val _global: GlobalModule = new GlobalModuleImpl(context, backend, prefs, googleApi, base64, syncRequests)
+  private lazy val _global: GlobalModule = new GlobalModuleImpl(context, backend, prefs, googleApi, base64, syncRequests, notificationsUi)
   private lazy val ui: UiModule = new UiModule(_global)
 
   //Try to avoid using these - map from the futures instead.
@@ -342,12 +345,13 @@ object ZMessaging { self =>
   def currentBeDrift = beDrift.currentValue.getOrElse(Duration.ZERO)
 
   //TODO - we should probably just request the entire GlobalModule from the UI here
-  def onCreate(context:      Context,
-               beConfig:     BackendConfig,
-               prefs:        GlobalPreferences,
-               googleApi:    GoogleApi,
-               base64:       Base64,
-               syncRequests: SyncRequestService) = {
+  def onCreate(context:        Context,
+               beConfig:       BackendConfig,
+               prefs:          GlobalPreferences,
+               googleApi:      GoogleApi,
+               base64:         Base64,
+               syncRequests:   SyncRequestService,
+               notificationUi: NotificationUiController) = {
     Threading.assertUiThread()
 
     if (this.currentUi == null) {
@@ -357,6 +361,7 @@ object ZMessaging { self =>
       this.googleApi = googleApi
       this.base64 = base64
       this.syncRequests = syncRequests
+      this.notificationsUi = notificationUi
       currentUi = ui
       currentGlobal = _global
       currentAccounts = currentGlobal.accountsService
