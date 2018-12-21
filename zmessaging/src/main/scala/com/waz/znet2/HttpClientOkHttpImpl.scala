@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, InputStream}
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
+import com.waz.ServerConfig
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.threading.CancellableFuture
@@ -107,15 +108,18 @@ object HttpClientOkHttpImpl {
   }
 
   def createCertificatePinner: CertificatePinner = {
-    val publicKeySha256 = MessageDigest.getInstance("SHA-256").digest(ServerTrust.WirePublicKey)
+    //val publicKeySha256 = MessageDigest.getInstance("SHA-256").digest(ServerTrust.WirePublicKey)
+val publicKeySha256 = MessageDigest.getInstance("SHA-256").digest(ServerTrust.getCA_trustArray)
     new CertificatePinner.Builder()
-      .add(s"*.${ServerTrust.WireDomain}", "sha256/" + AESUtils.base64(publicKeySha256))
+      //.add(s"*.${ServerTrust.WireDomain}", "sha256/" + AESUtils.base64(publicKeySha256))
+      .add(s"*.${ServerConfig.getBASE_URL_DOMAINS}", "sha256/" + AESUtils.base64(publicKeySha256))
       .build()
   }
 
   def createModernConnectionSpec: ConnectionSpec =
     new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
-      .tlsVersions(TlsVersion.TLS_1_2)
+      //.tlsVersions(TlsVersion.TLS_1_2)
+      .tlsVersions(ServerTrust.getTLS_VERSION())
       .cipherSuites(
         CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384

@@ -327,7 +327,7 @@ object ZMessaging { self =>
 
   def accountTag[A: reflect.Manifest](userId: UserId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${userId.str.take(8)}"
 
-  private implicit val logTag: LogTag = logTagFor(ZMessaging)
+  private implicit val logTag: LogTag = logTagFor[ZMessaging]
 
   private[waz] var context: Context = _
 
@@ -336,6 +336,7 @@ object ZMessaging { self =>
   private var backend:      BackendConfig = BackendConfig.StagingBackend
   private var base64:       Base64 = _
   private var syncRequests: SyncRequestService = _
+
 
   //var for tests - and set here so that it is globally available without the need for DI
   var clock = Clock.systemUTC()

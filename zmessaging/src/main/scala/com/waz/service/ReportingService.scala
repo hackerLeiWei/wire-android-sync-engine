@@ -91,7 +91,7 @@ class GlobalReportingService(context: Context, cache: CacheService, metadata: Me
         }
     }
 
-  val VersionReporter = Reporter("Wire", { writer =>
+  val VersionReporter = Reporter("Secret", { writer =>
     import android.os.Build._
     Future.successful {
       writer.println(s"time of log: ${Instant.now}")

@@ -17,6 +17,8 @@
  */
 package com.waz.service
 
+import android.text.TextUtils
+import com.waz.ServerConfig
 import com.waz.service.BackendConfig.FirebaseOptions
 import com.waz.utils.wrappers.URI
 
@@ -29,14 +31,50 @@ object BackendConfig {
   case class FirebaseOptions(pushSenderId: String, appId: String, apiKey: String)
 
   //This information can be found in downloadable google-services.json file from the BE console.
-  val StagingFirebaseOptions = FirebaseOptions("723990470614", "1:723990470614:android:9a1527f79aa62284", "AIzaSyAGCoJGUtDBLJJiQPLxHQRrdkbyI0wlbo8")
-  val ProdFirebaseOptions    = FirebaseOptions("782078216207", "1:782078216207:android:d3db2443512d2055", "AIzaSyBdYVv2f-Y7JJmHVmDNCKgWvX6Isa8rAGA")
+  private var StagingFirebaseOptions: FirebaseOptions = _
+  // FirebaseOptions("723990470614", "1:723990470614:android:9a1527f79aa62284", "AIzaSyAGCoJGUtDBLJJiQPLxHQRrdkbyI0wlbo8")
+  var ProdFirebaseOptions: FirebaseOptions = _
+  //FirebaseOptions("782078216207", "1:782078216207:android:d3db2443512d2055", "AIzaSyBdYVv2f-Y7JJmHVmDNCKgWvX6Isa8rAGA")
 
-  val StagingBackend = BackendConfig(URI.parse("https://staging-nginz-https.zinfra.io"), "https://staging-nginz-ssl.zinfra.io/await", StagingFirebaseOptions, "staging")
-  val ProdBackend    = BackendConfig(URI.parse("https://prod-nginz-https.wire.com"),     "https://prod-nginz-ssl.wire.com/await",     ProdFirebaseOptions,    "prod")
+  var StagingBackend: BackendConfig = _
+  // BackendConfig(URI.parse("https://staging-nginz-https.zinfra.io"), "https://staging-nginz-ssl.zinfra.io/await", StagingFirebaseOptions, "staging")
+  var ProdBackend: BackendConfig = _
+  //BackendConfig(URI.parse("https://prod-nginz-https.wire.com"),     "https://prod-nginz-ssl.wire.com/await",     ProdFirebaseOptions,    "prod")
 
-  lazy val byName = Seq(StagingBackend, ProdBackend).map(b => b.environment -> b).toMap
+  def byName: Map[String, BackendConfig] = Seq(StagingBackend, ProdBackend).map(b => b.environment -> b).toMap
 
-  def apply(baseUrl: String): BackendConfig = BackendConfig(URI.parse(baseUrl), "", StagingFirebaseOptions, "") // XXX only use for testing!
+  def getStagingFirebaseOptions() = StagingFirebaseOptions
+
+  def getProdFirebaseOptions() = ProdFirebaseOptions
+
+  def getStagingBackend() = StagingBackend
+
+  def getProdBackend() = ProdBackend
+
+  def apply(baseUrl: String): BackendConfig = {
+    if (StagingFirebaseOptions==null){
+      throw new NullPointerException("BackendConfig#StagingFirebaseOptions is NULL")
+    }
+    BackendConfig(URI.parse(baseUrl), "", StagingFirebaseOptions, "")
+  } // XXX only use for testing!
+
+
+  /**
+    * [[ServerConfig.setParams()]] 或 [[ServerConfig.setAllParams()]]需要被调用
+    *
+    * @param project_number
+    * @param mobilesdk_app_id
+    * @param current_key
+    */
+  def initFirebase(project_number: String, mobilesdk_app_id: String, current_key: String): Unit = {
+    if (TextUtils.isEmpty(ServerConfig.getBASE_URL_HTTPS)) {
+      throw new NullPointerException("[[ServerConfig.setParams()]] 或 [[ServerConfig.setAllParams()]]需要被调用")
+    } else {
+      ProdFirebaseOptions = FirebaseOptions(project_number, mobilesdk_app_id, current_key)
+      StagingFirebaseOptions = FirebaseOptions(project_number, mobilesdk_app_id, current_key)
+      StagingBackend = BackendConfig(URI.parse(ServerConfig.getBASE_URL_HTTPS()), ServerConfig.getBASE_URL_HTTPS() + "/await", StagingFirebaseOptions, "staging")
+      ProdBackend = BackendConfig(URI.parse(ServerConfig.getBASE_URL_HTTPS()), ServerConfig.getBASE_URL_HTTPS() + "/await", ProdFirebaseOptions, "prod")
+    }
+  }
 
 }

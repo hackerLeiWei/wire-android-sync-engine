@@ -70,72 +70,151 @@ object AssetService {
   sealed trait RawAssetInput
 
   object RawAssetInput {
+
     case class UriInput(uri: URI) extends RawAssetInput
+
     case class ByteInput(bytes: Array[Byte]) extends RawAssetInput
+
     case class BitmapInput(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL) extends RawAssetInput
+
     case class WireAssetInput(id: AssetId) extends RawAssetInput
+
   }
 
-  lazy val SaveImageDir = {
-    val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + File.separator
-    val dir = new File(path)
-    dir.mkdirs()
-    dir
+  //
+  //  lazy val SaveImageDir = {
+  //    val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + File.separator
+  //    val dir = new File(path)
+  //    dir.mkdirs()
+  //    dir
+  //  }
+  //
+  //  def assetDir(context: Context) = new File(context.getFilesDir, "assets")
+  //
+  //  def sanitizeFileName(name: String) = name.replace(' ', '_').replaceAll("[^\\w]", "")
+  //
+  //  def saveImageFile(mime: Mime) = new File(SaveImageDir,  s"${System.currentTimeMillis}.${mime.extension}")
+  //
+  //  sealed trait BitmapResult
+  //  object BitmapResult {
+  //    case object Empty extends BitmapResult
+  //    case class BitmapLoaded(bitmap: Bitmap, etag: Int = 0) extends BitmapResult {
+  //      override def toString: LogTag = s"BitmapLoaded([${bitmap.getWidth}, ${bitmap.getHeight}], $etag)"
+  //    }
+  //    case class LoadingFailed(ex: Throwable) extends BitmapResult
+  //  }
+  //
+  //}
+
+
+  private var SaveImageDirName = "Secret"
+
+  private var SaveImageDir: File = _;
+
+  def getSaveImageDir(): File = {
+    if (SaveImageDir == null || !SaveImageDir.exists()) {
+      initSaveImageDir()
+    }
+    SaveImageDir
+  }
+
+  def getSaveImageDirName = SaveImageDirName
+
+  def initSaveImageDir(): Boolean = {
+    val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + File.separator + getSaveImageDirName
+    SaveImageDir = new File(path)
+    SaveImageDir.mkdirs()
+  }
+
+  def setSaveImageDirName(_SaveImageDirName: String): Unit = {
+    SaveImageDirName = _SaveImageDirName
+    initSaveImageDir()
   }
 
   def assetDir(context: Context) = new File(context.getFilesDir, "assets")
 
-  def sanitizeFileName(name: String) = name.replace(' ', '_').replaceAll("[^\\w]", "")
+  def sanitizeFileName(name: String) = name.replace(' ', '_').replaceAll(s"[^\\${getSaveImageDirName}]", "")
 
-  def saveImageFile(mime: Mime) = new File(SaveImageDir,  s"${System.currentTimeMillis}.${mime.extension}")
+  def saveImageFile(mime: Mime) = new File(getSaveImageDir, s"${getSaveImageDirName}_${System.currentTimeMillis}.${mime.extension}")
+
 
   sealed trait BitmapResult
+
   object BitmapResult {
+
     case object Empty extends BitmapResult
+
     case class BitmapLoaded(bitmap: Bitmap, etag: Int = 0) extends BitmapResult {
       override def toString: LogTag = s"BitmapLoaded([${bitmap.getWidth}, ${bitmap.getHeight}], $etag)"
     }
+
     case class LoadingFailed(ex: Throwable) extends BitmapResult
+
   }
 
 }
 
+
+/**
+  * for java
+  */
+object AssetServiceParams {
+  def setSaveImageDirName(dirName: String): Unit = {
+    AssetService.setSaveImageDirName(dirName)
+  }
+}
+
 trait AssetService {
   def assetSignal(id: AssetId): Signal[(AssetData, api.AssetStatus)]
+
   def downloadProgress(id: AssetId): Signal[ProgressIndicator.ProgressData]
+
   def cancelDownload(id: AssetId): Future[Unit]
+
   def uploadProgress(id: AssetId): Signal[ProgressIndicator.ProgressData]
+
   def cancelUpload(id: AssetId, msg: MessageId): Future[Unit]
+
   def markUploadFailed(id: AssetId, status: AssetStatus.Syncable): Future[Any] // should be: Future[SyncId]
 
   def addAssetForUpload(a: AssetForUpload): Future[Option[AssetData]]
+
   def addAsset(input: RawAssetInput, isProfilePic: Boolean = false, overrideId: Option[AssetId] = None): Future[Option[AssetData]]
 
   def updateAssets(data: Seq[AssetData]): Future[Set[AssetData]]
+
   def getLocalData(id: AssetId): CancellableFuture[Option[LocalData]]
+
   def getAssetData(id: AssetId): Future[Option[AssetData]]
+
   def saveAssetToDownloads(id: AssetId): Future[Option[File]]
+
   def saveAssetToDownloads(asset: AssetData): Future[Option[File]]
+
   def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]]
+
   def getContentUri(id: AssetId): CancellableFuture[Option[URI]]
+
   def mergeOrCreateAsset(newData: AssetData): Future[Option[AssetData]]
+
   def removeAssets(ids: Iterable[AssetId]): Future[Unit]
+
   def removeSource(id: AssetId): Future[Unit]
 }
 
-class AssetServiceImpl(storage:         AssetsStorage,
-                       generator:       ImageAssetGenerator,
-                       cache:           CacheService,
-                       context:         Context,
-                       messages:        MessagesStorage,
-                       loaderService:   AssetLoaderService,
-                       loader:          AssetLoader,
-                       errors:          ErrorsService,
-                       permissions:     PermissionsService,
-                       metaService:     MetaDataService,
-                       sync:            SyncServiceHandle,
-                       media:           GlobalRecordAndPlayService,
-                       prefs:           GlobalPreferences) extends AssetService {
+class AssetServiceImpl(storage: AssetsStorage,
+                       generator: ImageAssetGenerator,
+                       cache: CacheService,
+                       context: Context,
+                       messages: MessagesStorage,
+                       loaderService: AssetLoaderService,
+                       loader: AssetLoader,
+                       errors: ErrorsService,
+                       permissions: PermissionsService,
+                       metaService: MetaDataService,
+                       sync: SyncServiceHandle,
+                       media: GlobalRecordAndPlayService,
+                       prefs: GlobalPreferences) extends AssetService {
 
   import AssetService._
   import com.waz.threading.Threading.Implicits.Background
@@ -155,11 +234,13 @@ class AssetServiceImpl(storage:         AssetsStorage,
   storage.onDeleted { assets => media.releaseAnyOngoing(assets.map(AssetMediaKey)(breakOut)) }
 
   errors.onErrorDismissed {
-    case AssetError(ms) => Future.traverse(ms) { messages.remove }
+    case AssetError(ms) => Future.traverse(ms) {
+      messages.remove
+    }
   }
 
   override def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {
-    case asset @ AssetData.WithStatus(status) => (asset.status match {
+    case asset@AssetData.WithStatus(status) => (asset.status match {
       case UploadDone => //only if the asset is uploaded, check for a cache entry. Upload state takes precedence over download state
         cache.optSignal(asset.cacheKey).map(_.isDefined) flatMap {
           case true =>
@@ -207,7 +288,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
 
   //TODO remove use of AssetForUpload and then this method can go
   override def addAssetForUpload(a: AssetForUpload) = a match {
-    case ContentUriAssetForUpload(id, uri)   => addAsset(UriInput(uri), overrideId = Some(id))
+    case ContentUriAssetForUpload(id, uri) => addAsset(UriInput(uri), overrideId = Some(id))
     case AudioAssetForUpload(id, data, _, _) => addAsset(UriInput(CacheUri(data.data.key, context)), overrideId = Some(id))
   }
 
@@ -235,28 +316,28 @@ class AssetServiceImpl(storage:         AssetsStorage,
         for {
           info <- queryContentUriMetaData(context, uri)
           asset = AssetData(
-            id          = overrideId.getOrElse(AssetId()),
-            mime        = info.mime,
+            id = overrideId.getOrElse(AssetId()),
+            mime = info.mime,
             sizeInBytes = info.size.getOrElse(0),
-            name        = info.name.map {
+            name = info.name.map {
               case name if info.mime.extension.nonEmpty && !name.contains(".") => name + "." + info.mime.extension
-              case name                                                        => name
+              case name => name
             },
-            source      = Some(uri),
+            source = Some(uri),
             metaData = info.mime match {
               case Image() => AssetMetaData.Image(context, uri, Tag.Medium)
-              case _       => Option.empty[AssetMetaData]
+              case _ => Option.empty[AssetMetaData]
             }
           )
           saved <- info.mime match {
             case Image() => generateImageData(asset, isProfilePic)
-            case _       =>
+            case _ =>
               //trigger calculation of preview and meta data for asset.
               //Do this in parallel to ensure that the message is created quickly.
               //pass to asset processing so sending can wait on the result
               AssetProcessing(ProcessingTaskKey(asset.id)) {
                 for {
-                  entry   <- loadAssetData(asset)
+                  entry <- loadAssetData(asset)
                   updated <- updateMetaData(asset, entry)
                 } yield updated
               }
@@ -272,7 +353,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
         generateImageData(AssetData.newImageAsset(tag = Medium).copy(sizeInBytes = bytes.length, data = Some(bytes)), isProfilePic)
 
       case BitmapInput(bm, orientation) =>
-        val mime   = Mime(BitmapUtils.getMime(bm))
+        val mime = Mime(BitmapUtils.getMime(bm))
         val (w, h) = if (ImageLoader.Metadata.shouldSwapDimens(orientation)) (bm.getHeight, bm.getWidth) else (bm.getWidth, bm.getHeight)
         val asset = AssetData.newImageAsset(tag = Medium).copy(sizeInBytes = bm.getByteCount)
         val imageData = loader.loadFromBitmap(asset.id, bm, orientation)
@@ -324,13 +405,13 @@ class AssetServiceImpl(storage:         AssetsStorage,
   private def updateMetaData(oldAsset: AssetData, entry: LocalData): CancellableFuture[Option[AssetData]] = {
     val (mime, nm) = entry match {
       case e: CacheEntry => (e.data.mimeType, e.data.fileName.orElse(oldAsset.name))
-      case _             => (oldAsset.mime, oldAsset.name)
+      case _ => (oldAsset.mime, oldAsset.name)
     }
     val asset = oldAsset.copy(mime = mime, name = nm)
     for {
-      meta     <- metaService.loadMetaData(asset, entry)
-      prev     <- metaService.loadPreview(asset, entry)
-      updated  <- CancellableFuture lift storage.updateAsset(asset.id,
+      meta <- metaService.loadMetaData(asset, entry)
+      prev <- metaService.loadPreview(asset, entry)
+      updated <- CancellableFuture lift storage.updateAsset(asset.id,
         _.copy(
           metaData = meta,
           mime = mime,
@@ -399,7 +480,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
           Some(file)
         case None =>
           None
-      } (Threading.IO)
+      }(Threading.IO)
 
     val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
     if (dir.isDirectory) {
